@@ -1,0 +1,8 @@
+version: 0.2.0
+files:
+  - url: LiveWatch-Setup.exe
+    sha512: 6MX/ROdcwuDlv7YxQwTahK+nMRZSYx8Zv6U2Y5HxA3Ppkskw6fw6AS1XW87THRGg5l0ef2r6BFpF67p1TTcvkQ==
+    size: 74691087
+path: LiveWatch-Setup.exe
+sha512: 6MX/ROdcwuDlv7YxQwTahK+nMRZSYx8Zv6U2Y5HxA3Ppkskw6fw6AS1XW87THRGg5l0ef2r6BFpF67p1TTcvkQ==
+releaseDate: '2026-09-28T04:37:36.384Z'
