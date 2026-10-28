@@ -1,8 +1,81 @@
-version: 0.4.3
-files:
-  - url: LiveWatch-Setup.exe
-    sha512: NRc7rApJY5lQ9a/kxSefmpoZl8k3XWxuIdmizoMrDHTj9ZlEyUp6KrVIOCqE50l5Lt8gNwy85YuhjDk1EqEXIw==
-    size: 75845814
-path: LiveWatch-Setup.exe
-sha512: NRc7rApJY5lQ9a/kxSefmpoZl8k3XWxuIdmizoMrDHTj9ZlEyUp6KrVIOCqE50l5Lt8gNwy85YuhjDk1EqEXIw==
-releaseDate: '2026-10-28T03:33:14.846Z'
+# Workflow build macOS untuk repo PUBLIC PlayerGit76/livewatch-releases.
+#
+# Kenapa di repo public: GitHub Actions gratis tanpa batas menit & penyimpanan untuk
+# repo public (termasuk mesin Mac), sedangkan repo private (livewatch-app) jatahnya
+# terbatas. Kode aplikasi tetap di repo private — workflow ini hanya mengambilnya
+# sementara saat build memakai token APP_REPO_TOKEN, lalu hasil build (.dmg/.zip)
+# langsung diunggah ke rilis yang tag-nya diisi saat menjalankan workflow.
+#
+# Secret yang dibutuhkan di livewatch-releases (Settings → Secrets → Actions):
+#   APP_REPO_TOKEN = fine-grained token, akses baca (Contents: Read) ke livewatch-app
+#   GROQ_API_KEY   = key Groq bawaan (sama seperti di installer Windows)
+name: Build LiveWatch macOS
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag rilis yang sudah dibuat, mis. v0.4.3"
+        required: true
+
+permissions:
+  contents: write # untuk mengunggah file ke rilis di repo ini
+
+jobs:
+  build-mac:
+    runs-on: macos-latest
+    env:
+      TAG: ${{ github.event.inputs.tag }}
+    steps:
+      - name: Ambil kode aplikasi (repo private livewatch-app)
+        uses: actions/checkout@v5
+        with:
+          repository: PlayerGit76/livewatch-app
+          ref: main
+          token: ${{ secrets.APP_REPO_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Cek versi aplikasi = tag rilis
+        run: |
+          VER="v$(node -p "require('./package.json').version")"
+          if [ "$VER" != "$TAG" ]; then
+            echo "::error::Versi di package.json ($VER) tidak sama dengan tag rilis ($TAG)."
+            exit 1
+          fi
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null || { echo "::error::Rilis $TAG belum dibuat di repo ini."; exit 1; }
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Tulis app-config.json (key Groq bawaan)
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: |
+          node -e "const c=require('./app-config.example.json'); c.groqApiKey=process.env.GROQ_API_KEY||''; require('fs').writeFileSync('app-config.json', JSON.stringify(c,null,2))"
+          if [ -z "$GROQ_API_KEY" ]; then echo "::warning::Secret GROQ_API_KEY belum diisi — transkrip & ringkasan Penilaian nonaktif di build ini."; fi
+
+      - name: Build macOS (Apple Silicon + Intel)
+        run: |
+          for i in 1 2 3; do
+            if npx electron-builder --mac --publish never; then exit 0; fi
+            echo "::warning::Build Mac gagal (percobaan $i dari 3), mencoba lagi..."
+            rm -rf release
+            sleep 20
+          done
+          exit 1
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Unggah ke rilis
+        run: |
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+            release/LiveWatch-Mac-*.dmg release/LiveWatch-Mac-*.zip release/LiveWatch-Mac-*.blockmap release/latest-mac.yml
+        env:
+          GH_TOKEN: ${{ github.token }}
